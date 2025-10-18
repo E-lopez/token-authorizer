@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Token authorizer lambda for JWT validation
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name
+  
+  S3Bucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package
+    Default: token-authorizer-deployment-bucket
+  
+  S3Key:
+    Type: String
+    Default: token-authorizer/function.zip
+    Description: S3 key for the Lambda deployment package
+    
+  UserPoolId:
+    Type: String
+    Description: Cognito User Pool ID
+    
+  ExpectedAudience:
+    Type: String
+    Description: Expected audience (Client ID or Resource Server)
+    
+  CognitoRegion:
+    Type: String
+    Default: us-east-1
+    Description: AWS region for Cognito
+
+
+Resources:
+  # Lambda Execution Role
+  TokenAuthorizerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # Lambda Function
+  TokenAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub token-authorizer-${Environment}
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      CodeUri: 
+        Bucket: !Ref S3Bucket
+        Key: !Ref S3Key
+      Handler: lambda_function.lambda_handler
+      MemorySize: 512
+      Timeout: 30
+      Role: !GetAtt TokenAuthorizerRole.Arn
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          USER_POOL_ID: !Ref UserPoolId
+          EXPECTED_AUDIENCE: !Ref ExpectedAudience
+          COGNITO_REGION: !Ref CognitoRegion
+      # Token authorizer doesn't need HTTP API events
+
+Outputs:
+  TokenAuthorizerFunctionArn:
+    Description: Token Authorizer Lambda Function ARN
+    Value: !GetAtt TokenAuthorizerFunction.Arn
+    Export:
+      Name: !Sub TokenAuthorizerFunction-${Environment}
+
+  TokenAuthorizerFunctionName:
+    Description: Token Authorizer Lambda Function Name
+    Value: !Ref TokenAuthorizerFunction
+    Export:
+      Name: !Sub TokenAuthorizerFunctionName-${Environment}
