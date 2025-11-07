@@ -4,11 +4,8 @@ import time
 from config import Config
 
 # Get configuration from environment variables
-COGNITO_REGION = os.environ.get('COGNITO_REGION', 'us-east-1')
-USER_POOL_ID = os.environ.get('USER_POOL_ID')
-EXPECTED_AUDIENCE = os.environ.get('EXPECTED_AUDIENCE')
 ENV = os.environ.get('ENVIRONMENT', 'dev')
-DOPPLER_TOKEN_DEV = os.environ.get('DOPPLER_TOKEN_DEV')
+DOPPLER_TOKEN = os.environ.get('DOPPLER_TOKEN', 'DOPPLER_TOKEN')
 
 
 def lambda_handler(event, context):
@@ -22,10 +19,10 @@ def lambda_handler(event, context):
     
     # Debug environment variables
     print(f"ENV: {ENV}")
-    print(f"DOPPLER_TOKEN_DEV: {DOPPLER_TOKEN_DEV}")
+    print(f"DOPPLER_TOKEN: {DOPPLER_TOKEN}")
     
     # Validate required environment variables
-    if not ENV or not DOPPLER_TOKEN_DEV:
+    if not ENV or not DOPPLER_TOKEN:
         print("Missing required environment variables.")
         return deny_response("Server configuration error")
 

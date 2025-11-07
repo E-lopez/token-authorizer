@@ -6,8 +6,7 @@ logger = logging.getLogger(__name__)
 
 def get_doppler_secret(key, default=None):
     """Get secret from Doppler API"""
-    token_per_env = os.environ.get('ENVIRONMENT')
-    token = os.environ.get(f'DOPPLER_TOKEN_{token_per_env.upper()}', 'DOPPLER_TOKEN')
+    token = os.environ.get('DOPPLER_TOKEN', 'DOPPLER_TOKEN')
     if not token:
         return default
     
