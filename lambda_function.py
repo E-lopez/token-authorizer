@@ -1,19 +1,15 @@
 import os
 import jwt
-from jwt import PyJWKClient
+import time
+from config import Config
 
 # Get configuration from environment variables
 COGNITO_REGION = os.environ.get('COGNITO_REGION', 'us-east-1')
 USER_POOL_ID = os.environ.get('USER_POOL_ID')
 EXPECTED_AUDIENCE = os.environ.get('EXPECTED_AUDIENCE')
+ENV = os.environ.get('ENVIRONMENT', 'dev')
+DOPPLER_TOKEN_DEV = os.environ.get('DOPPLER_TOKEN_DEV')
 
-# Only set ISSUER and JWKS_URL if USER_POOL_ID exists
-if USER_POOL_ID:
-    ISSUER = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}"
-    JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
-else:
-    ISSUER = None
-    JWKS_URL = None
 
 def lambda_handler(event, context):
     print("UPDATED CODE - 2025-01-16 15:30:00 - NEW VERSION")
@@ -25,14 +21,12 @@ def lambda_handler(event, context):
         print("Headers:", event['headers'])
     
     # Debug environment variables
-    print(f"USER_POOL_ID: {USER_POOL_ID}")
-    print(f"EXPECTED_AUDIENCE: {EXPECTED_AUDIENCE}")
-    print(f"COGNITO_REGION: {COGNITO_REGION}")
-    print(f"All env vars: {dict(os.environ)}")
+    print(f"ENV: {ENV}")
+    print(f"DOPPLER_TOKEN_DEV: {DOPPLER_TOKEN_DEV}")
     
     # Validate required environment variables
-    if not USER_POOL_ID or not EXPECTED_AUDIENCE:
-        print("Missing required environment variables: USER_POOL_ID, EXPECTED_AUDIENCE")
+    if not ENV or not DOPPLER_TOKEN_DEV:
+        print("Missing required environment variables.")
         return deny_response("Server configuration error")
 
     # For HTTP API v2 with identity source $request.querystring.token,
@@ -52,34 +46,41 @@ def lambda_handler(event, context):
         return deny_response("No token provided")
 
     try:
-        jwk_client = PyJWKClient(JWKS_URL)
-        signing_key = jwk_client.get_signing_key_from_jwt(token)
+        config = Config()
+        SECRET = config.SECRET_KEY
+
+        print(f"Decoding token... {SECRET[:20]}...{SECRET[-5:]}")
 
         # For Cognito access tokens, we don't validate audience as they don't have 'aud' field
         decoded_token = jwt.decode(
             token,
-            signing_key.key,
-            algorithms=["RS256"],
-            issuer=ISSUER,
-            options={"verify_aud": False}  # Cognito access tokens don't have audience
+            SECRET,
+            algorithms=["HS256"],
         )
 
         # Optionally check scope, token_use, etc.
         token_use = decoded_token.get("token_use")
+        print(f"Token use: {token_use}")
         if token_use != "access":
             return deny_response(f"Invalid token_use: {token_use}")
 
+        token_issuer = decoded_token.get("iss")
+        print(f"Token issuer: {token_issuer}")
+        if token_issuer != "https://kredilatam.com/token-issuer":
+            return deny_response(f"Invalid token_issuer: {token_issuer}")
+
+        current_time = int(time.time())
+        if decoded_token['exp'] < current_time:
+            return deny_response('Token expired')
+
         print("Authorized token:", decoded_token)
         
-        # For HTTP API v2 with Simple response mode, return context object
-        return {
-            "isAuthorized": True,
-            "context": {
-                "client_id": decoded_token.get("client_id", ""),
-                "scope": decoded_token.get("scope", ""),
-                "sub": decoded_token.get("sub", ""),
-            }
+        # For HTTP API v2 with Simple response mode, return boolean or context object
+        response = {
+            "isAuthorized": True
         }
+        print("Returning authorization response:", response)
+        return response
 
     except Exception as e:
         print(f"Authorization failed: {str(e)}")
@@ -89,8 +90,5 @@ def lambda_handler(event, context):
 def deny_response(message="Unauthorized"):
     # For HTTP API v2 with Simple response mode
     return {
-        "isAuthorized": False,
-        "context": {
-            "error": message
-        }
+        "isAuthorized": False
     }
